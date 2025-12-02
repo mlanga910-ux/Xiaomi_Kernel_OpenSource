@@ -20,12 +20,10 @@ jobs:
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libncurses-dev zip git python3 device-tree-compiler
 
       - name: Disable legacy DrvGen (Python2-only)
-        run: |
-          sed -i 's/DrvGen.py/# DrvGen disabled for CI/g' scripts/drvgen/drvgen.mk || true
+        run: sed -i 's/DrvGen.py/# DrvGen disabled for CI/g' scripts/drvgen/drvgen.mk || true
 
       - name: Disable internal dtc build
-        run: |
-          sed -i 's/^hostprogs-y.*dtc/# &/' scripts/dtc/Makefile || true
+        run: sed -i 's/^hostprogs-y.*dtc/# &/' scripts/dtc/Makefile || true
 
       - name: Ensure gadget/netfilter configs in defconfig
         run: |
@@ -53,25 +51,26 @@ jobs:
           ensure 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
           ensure 'CONFIG_NETFILTER_XT_TARGET_LOG=y'
 
-      - name: Build kernel (robust)
+      - name: Build kernel
         env:
           ARCH: arm64
           SUBARCH: arm64
           CROSS_COMPILE: aarch64-linux-gnu-
         run: |
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc dandelion_defconfig
-          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz dtbs -j"$(nproc)" || true
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image dtbs -j"$(nproc)" || true
           ls -lh out/arch/arm64/boot/
-          test -f out/arch/arm64/boot/Image.gz
+          test -f out/arch/arm64/boot/Image
           test -f out/arch/arm64/boot/dandelion.dtb
 
       - name: Package with AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git
-          cp out/arch/arm64/boot/Image.gz AnyKernel3/
+          cp out/arch/arm64/boot/Image AnyKernel3/
           cp out/arch/arm64/boot/dandelion.dtb AnyKernel3/
           cd AnyKernel3
           zip -r9 ../dandelion-hid-netfilter.zip *
+          ls -lh ../dandelion-hid-netfilter.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
