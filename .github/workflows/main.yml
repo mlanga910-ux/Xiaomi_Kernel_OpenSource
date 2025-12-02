@@ -6,25 +6,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: ubuntu:18.04
 
     steps:
-      - name: Install base tools
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential bc flex bison libssl-dev \
-            git zip curl ca-certificates \
-            device-tree-compiler \
-            python python3 \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            libncurses-dev
-
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: dandelion-q-oss
+          ref: dandelion-q-oss   # branch so zdrojom pre Redmi 9C NFC
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential bc flex bison libssl-dev \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libncurses-dev zip git python3 device-tree-compiler
 
       - name: Disable legacy DrvGen (Python2-only)
         run: |
@@ -56,7 +49,7 @@ jobs:
           ensure 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
           ensure 'CONFIG_NETFILTER_XT_TARGET_LOG=y'
 
-      - name: Build kernel (use external dtc + force host yy location define)
+      - name: Build kernel (use external dtc + safe host flags)
         env:
           ARCH: arm64
           SUBARCH: arm64
