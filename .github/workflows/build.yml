@@ -56,11 +56,12 @@ jobs:
           ensure 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
           ensure 'CONFIG_NETFILTER_XT_TARGET_LOG=y'
 
-      - name: Build kernel (use external dtc)
+      - name: Build kernel (use external dtc + force host yy location define)
         env:
           ARCH: arm64
           SUBARCH: arm64
           CROSS_COMPILE: aarch64-linux-gnu-
+          HOSTCFLAGS: -DYYLTYPE_IS_DECLARED
         run: |
           make DTC=/usr/bin/dtc O=out dandelion_defconfig
           make DTC=/usr/bin/dtc O=out -j"$(nproc)"
