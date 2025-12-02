@@ -11,7 +11,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: dandelion-q-oss   # branch so zdrojom pre Redmi 9C NFC
+          ref: dandelion-q-oss
 
       - name: Install dependencies
         run: |
@@ -60,7 +60,7 @@ jobs:
           CROSS_COMPILE: aarch64-linux-gnu-
         run: |
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc dandelion_defconfig
-          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc -j"$(nproc)" || true
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz dtbs -j"$(nproc)" || true
           ls -lh out/arch/arm64/boot/
           test -f out/arch/arm64/boot/Image.gz
           test -f out/arch/arm64/boot/dandelion.dtb
