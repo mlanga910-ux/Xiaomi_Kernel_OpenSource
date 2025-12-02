@@ -10,7 +10,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: dandelion-q-oss   # správny branch pre Redmi 9C NFC
+          ref: dandelion-q-oss
 
       - name: Install dependencies
         run: |
@@ -21,6 +21,17 @@ jobs:
       - name: Disable legacy DrvGen (Python2-only)
         run: |
           sed -i 's/DrvGen.py/# DrvGen disabled for CI/g' scripts/drvgen/drvgen.mk || true
+
+      - name: Patch dtc yylloc duplicate (robust host build)
+        run: |
+          # Add YYLTYPE_IS_DECLARED to parser/lexer to avoid duplicate yylloc
+          sed -i '1i #define YYLTYPE_IS_DECLARED 1' scripts/dtc/dtc-parser.tab.c || true
+          sed -i '1i #define YYLTYPE_IS_DECLARED 1' scripts/dtc/dtc-lexer.lex.c || true
+          # Also ensure host CFLAGS carry the define if sources get regenerated
+          if grep -q 'hostprogs-y.*dtc' scripts/dtc/Makefile; then
+            sed -i '/^#.*CFLAGS.*/! s/^/HOSTCFLAGS_dtc-parser.tab.o += -DYYLTYPE_IS_DECLARED\n/' scripts/dtc/Makefile
+            sed -i '/^#.*CFLAGS.*/! s/^/HOSTCFLAGS_dtc-lexer.lex.o += -DYYLTYPE_IS_DECLARED\n/' scripts/dtc/Makefile
+          fi
 
       - name: Ensure gadget/netfilter configs in defconfig
         run: |
@@ -48,12 +59,11 @@ jobs:
           ensure 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
           ensure 'CONFIG_NETFILTER_XT_TARGET_LOG=y'
 
-      - name: Build kernel
+      - name: Build kernel (use external dtc)
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          # použijeme systémový dtc, aby sme sa vyhli chybe yylloc
           make DTC=/usr/bin/dtc O=out dandelion_defconfig
           make DTC=/usr/bin/dtc O=out -j$(nproc)
           test -f out/arch/arm64/boot/Image.gz-dtb
