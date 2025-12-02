@@ -10,13 +10,13 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: dandelion-q-oss   # tu nastavíš správny branch
+          ref: dandelion-q-oss   # správny branch pre Redmi 9C NFC
 
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y build-essential bc flex bison libssl-dev \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libncurses-dev zip git python3
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libncurses-dev zip git python3 device-tree-compiler
 
       - name: Disable legacy DrvGen (Python2-only)
         run: |
@@ -53,8 +53,9 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          make O=out dandelion_defconfig
-          make O=out -j$(nproc)
+          # použijeme systémový dtc, aby sme sa vyhli chybe yylloc
+          make DTC=/usr/bin/dtc O=out dandelion_defconfig
+          make DTC=/usr/bin/dtc O=out -j$(nproc)
           test -f out/arch/arm64/boot/Image.gz-dtb
 
       - name: Package with AnyKernel3
