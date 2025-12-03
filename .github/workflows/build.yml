@@ -1,4 +1,4 @@
-name: Build dandelion (Redmi 9C NFC) kernel
+ name: Build dandelion (Redmi 9C NFC) kernel
 
 on:
   workflow_dispatch:
@@ -60,7 +60,7 @@ jobs:
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc dandelion_defconfig
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image dtbs -j$(nproc) | tee build.log || \
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz dtbs -j$(nproc) | tee build.log
-          ls -lh out/arch/arm64/boot/
+          ls -lh out/arch/arm64/boot/ || true
 
       - name: Upload build log
         uses: actions/upload-artifact@v4
