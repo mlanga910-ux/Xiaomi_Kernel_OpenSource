@@ -58,13 +58,24 @@ jobs:
           CROSS_COMPILE: aarch64-linux-gnu-
         run: |
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc dandelion_defconfig
-          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image dtbs -j$(nproc)
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image dtbs -j$(nproc) | tee build.log || \
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz dtbs -j$(nproc) | tee build.log
           ls -lh out/arch/arm64/boot/
+
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
 
       - name: Package with AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git
-          cp out/arch/arm64/boot/Image AnyKernel3/
+          if [ -f out/arch/arm64/boot/Image ]; then
+            cp out/arch/arm64/boot/Image AnyKernel3/
+          elif [ -f out/arch/arm64/boot/Image.gz ]; then
+            cp out/arch/arm64/boot/Image.gz AnyKernel3/
+          fi
           DTB_PATH=$(ls out/arch/arm64/boot/dandelion.dtb 2>/dev/null || ls out/arch/arm64/boot/*.dtb | head -n1)
           cp "$DTB_PATH" AnyKernel3/ || true
           cd AnyKernel3
