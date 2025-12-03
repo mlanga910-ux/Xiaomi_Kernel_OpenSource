@@ -17,7 +17,8 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y build-essential bc flex bison libssl-dev \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libncurses-dev zip git python3 device-tree-compiler
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libncurses-dev zip git python3 device-tree-compiler \
+            libelf-dev lzop lz4
 
       - name: Disable legacy DrvGen and internal dtc
         run: |
