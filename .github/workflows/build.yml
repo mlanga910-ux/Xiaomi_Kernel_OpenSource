@@ -6,31 +6,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: ubuntu:18.04
 
     steps:
-      - name: Install base tools
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential bc flex bison libssl-dev \
-            git zip curl ca-certificates \
-            device-tree-compiler \
-            python python3 \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            libncurses-dev
-
-      - name: Checkout source
+      - name: Checkout kernel sources
         uses: actions/checkout@v4
         with:
           ref: dandelion-q-oss
 
-      - name: Disable legacy DrvGen (Python2-only)
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential bc flex bison libssl-dev \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libncurses-dev zip git python3 device-tree-compiler
+
+      - name: Disable legacy DrvGen and internal dtc
         run: |
           sed -i 's/DrvGen.py/# DrvGen disabled for CI/g' scripts/drvgen/drvgen.mk || true
+          sed -i 's/^hostprogs-y.*dtc/# &/' scripts/dtc/Makefile || true
 
-      - name: Ensure gadget/netfilter configs in defconfig
+      - name: Ensure gadget/netfilter configs
         run: |
           DEFCONFIG=arch/arm64/configs/dandelion_defconfig
           ensure() { grep -q "^$1" "$DEFCONFIG" || echo "$1" >> "$DEFCONFIG"; }
@@ -56,23 +50,25 @@ jobs:
           ensure 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
           ensure 'CONFIG_NETFILTER_XT_TARGET_LOG=y'
 
-      - name: Build kernel (use external dtc + force host yy location define)
+      - name: Build kernel (Image + dtbs)
         env:
           ARCH: arm64
           SUBARCH: arm64
           CROSS_COMPILE: aarch64-linux-gnu-
-          HOSTCFLAGS: -DYYLTYPE_IS_DECLARED
         run: |
-          make DTC=/usr/bin/dtc O=out dandelion_defconfig
-          make DTC=/usr/bin/dtc O=out -j"$(nproc)"
-          test -f out/arch/arm64/boot/Image.gz-dtb
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc dandelion_defconfig
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image dtbs -j$(nproc)
+          ls -lh out/arch/arm64/boot/
 
       - name: Package with AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cp out/arch/arm64/boot/Image AnyKernel3/
+          DTB_PATH=$(ls out/arch/arm64/boot/dandelion.dtb 2>/dev/null || ls out/arch/arm64/boot/*.dtb | head -n1)
+          cp "$DTB_PATH" AnyKernel3/ || true
           cd AnyKernel3
           zip -r9 ../dandelion-hid-netfilter.zip *
+          ls -lh ../dandelion-hid-netfilter.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
