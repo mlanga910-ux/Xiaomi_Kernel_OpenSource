@@ -1,4 +1,4 @@
- name: Build dandelion (Redmi 9C NFC) kernel
+name: Build dandelion (Redmi 9C NFC) kernel
 
 on:
   workflow_dispatch:
