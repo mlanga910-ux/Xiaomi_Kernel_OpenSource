@@ -67,6 +67,8 @@ jobs:
           ensure 'CONFIG_BT_L2CAP=y'
           ensure 'CONFIG_BT_RFCOMM=y'
           ensure 'CONFIG_BT_BNEP=y'
+          # Disable module signing (fix OpenSSL 3.0 error)
+          ensure 'CONFIG_MODULE_SIG=n'
 
       - name: Build kernel (Image only, strict)
         env:
