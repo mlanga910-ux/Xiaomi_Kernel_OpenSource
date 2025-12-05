@@ -1,4 +1,4 @@
-name: Build dandelion (Redmi 9C NFC) kernel
+name: Build dandelion (Redmi 9C NFC) kernel (allmodconfig)
 
 on:
   workflow_dispatch:
@@ -25,10 +25,31 @@ jobs:
           sed -i 's/DrvGen.py/# DrvGen disabled for CI/g' scripts/drvgen/drvgen.mk || true
           sed -i 's/^hostprogs-y.*dtc/# &/' scripts/dtc/Makefile || true
 
-      - name: Ensure gadget/netfilter configs
+      - name: Configure kernel (allmodconfig + hacking modules)
+        env:
+          ARCH: arm64
+          SUBARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
         run: |
-          DEFCONFIG=arch/arm64/configs/dandelion_defconfig
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc allmodconfig
+          DEFCONFIG=out/.config
           ensure() { grep -q "^$1" "$DEFCONFIG" || echo "$1" >> "$DEFCONFIG"; }
+          # Netfilter / NAT / proxy
+          ensure 'CONFIG_NETFILTER=y'
+          ensure 'CONFIG_NETFILTER_XTABLES=y'
+          ensure 'CONFIG_NETFILTER_NETLINK=y'
+          ensure 'CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y'
+          ensure 'CONFIG_NETFILTER_XT_MATCH_STATE=y'
+          ensure 'CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y'
+          ensure 'CONFIG_NETFILTER_XT_MATCH_OWNER=y'
+          ensure 'CONFIG_NETFILTER_XT_TARGET_MASQUERADE=y'
+          ensure 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
+          ensure 'CONFIG_NETFILTER_XT_TARGET_LOG=y'
+          # Tun/tap + packet capture
+          ensure 'CONFIG_TUN=y'
+          ensure 'CONFIG_PACKET=y'
+          ensure 'CONFIG_PACKET_MMAP=y'
+          # USB gadget HID/mass storage/RNDIS
           ensure 'CONFIG_USB_GADGET=y'
           ensure 'CONFIG_USB_CONFIGFS=y'
           ensure 'CONFIG_USB_CONFIGFS_HID=y'
@@ -37,19 +58,15 @@ jobs:
           ensure 'CONFIG_USB_CONFIGFS_NCM=y'
           ensure 'CONFIG_USB_CONFIGFS_RNDIS=y'
           ensure 'CONFIG_USB_OTG=y'
-          ensure 'CONFIG_PACKET=y'
-          ensure 'CONFIG_PACKET_MMAP=y'
-          ensure 'CONFIG_NETFILTER=y'
-          ensure 'CONFIG_NETFILTER_XTABLES=y'
-          ensure 'CONFIG_NETFILTER_NETLINK=y'
-          ensure 'CONFIG_TUN=y'
-          ensure 'CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y'
-          ensure 'CONFIG_NETFILTER_XT_MATCH_STATE=y'
-          ensure 'CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y'
-          ensure 'CONFIG_NETFILTER_XT_MATCH_OWNER=y'
-          ensure 'CONFIG_NETFILTER_XT_TARGET_MASQUERADE=y'
-          ensure 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
-          ensure 'CONFIG_NETFILTER_XT_TARGET_LOG=y'
+          # Wi-Fi stack
+          ensure 'CONFIG_CFG80211=y'
+          ensure 'CONFIG_MAC80211=y'
+          # Bluetooth stack
+          ensure 'CONFIG_BT=y'
+          ensure 'CONFIG_BT_HIDP=y'
+          ensure 'CONFIG_BT_L2CAP=y'
+          ensure 'CONFIG_BT_RFCOMM=y'
+          ensure 'CONFIG_BT_BNEP=y'
 
       - name: Build kernel (Image + dtbs)
         env:
@@ -57,7 +74,6 @@ jobs:
           SUBARCH: arm64
           CROSS_COMPILE: aarch64-linux-gnu-
         run: |
-          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc dandelion_defconfig
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image dtbs -j$(nproc) | tee build.log || \
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz dtbs -j$(nproc) | tee build.log
           ls -lh out/arch/arm64/boot/ || true
@@ -79,11 +95,11 @@ jobs:
           DTB_PATH=$(ls out/arch/arm64/boot/dandelion.dtb 2>/dev/null || ls out/arch/arm64/boot/*.dtb | head -n1)
           cp "$DTB_PATH" AnyKernel3/ || true
           cd AnyKernel3
-          zip -r9 ../dandelion-hid-netfilter.zip *
-          ls -lh ../dandelion-hid-netfilter.zip
+          zip -r9 ../dandelion-allmod-hacking.zip *
+          ls -lh ../dandelion-allmod-hacking.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dandelion-hid-netfilter
-          path: dandelion-hid-netfilter.zip
+          name: dandelion-allmod-hacking
+          path: dandelion-allmod-hacking.zip
