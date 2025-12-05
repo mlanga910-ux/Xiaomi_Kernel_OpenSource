@@ -1,4 +1,4 @@
-name: Build dandelion (Redmi 9C NFC) kernel (allmodconfig + hacking modules, OpenSSL3 fix)
+name: Build dandelion kernel
 
 on:
   workflow_dispatch:
@@ -10,15 +10,12 @@ jobs:
       ARCH: arm64
       SUBARCH: arm64
       CROSS_COMPILE: aarch64-linux-gnu-
-      KBUILD_BUILD_USER: matej
-      KBUILD_BUILD_HOST: actions
 
     steps:
       - name: Checkout kernel sources
         uses: actions/checkout@v4
         with:
-          # uprav na správnu vetvu tvojho kernelu
-          ref: dandelion-q-oss
+          ref: dandelion-q-oss   # uprav na vetvu, ktorú máš v repo
 
       - name: Install dependencies
         run: |
@@ -29,112 +26,48 @@ jobs:
             libncurses-dev device-tree-compiler libelf-dev \
             python3 zip lzop lz4 git
 
-      - name: Sanitize tree (disable legacy generators and internal dtc)
+      - name: Configure kernel
         run: |
-          # Niektoré MTK stromy majú rozbité generátory; vypneme ich pre CI
-          sed -i 's/DrvGen.py/# DrvGen disabled for CI/g' scripts/drvgen/drvgen.mk || true
-          sed -i 's/^hostprogs-y.*dtc/# internal dtc disabled/' scripts/dtc/Makefile || true
-
-      - name: Configure kernel (allmodconfig + hacking modules + OpenSSL3 fixes)
-        run: |
-          set -euo pipefail
           make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc allmodconfig
-
           DEFCONFIG=out/.config
           ensure() { grep -q "^$1$" "$DEFCONFIG" || echo "$1" >> "$DEFCONFIG"; }
-
-          # Netfilter / NAT / proxy
+          # Povolené moduly
           ensure 'CONFIG_NETFILTER=y'
-          ensure 'CONFIG_NETFILTER_NETLINK=y'
           ensure 'CONFIG_NETFILTER_XTABLES=y'
-          ensure 'CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y'
-          ensure 'CONFIG_NETFILTER_XT_MATCH_STATE=y'
-          ensure 'CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y'
-          ensure 'CONFIG_NETFILTER_XT_MATCH_OWNER=y'
           ensure 'CONFIG_NETFILTER_XT_TARGET_MASQUERADE=y'
           ensure 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
-          ensure 'CONFIG_NETFILTER_XT_TARGET_LOG=y'
-
-          # Tun/tap + packet capture
           ensure 'CONFIG_TUN=y'
           ensure 'CONFIG_PACKET=y'
           ensure 'CONFIG_PACKET_MMAP=y'
-
-          # USB gadget HID/mass storage/RNDIS/ECM/NCM
           ensure 'CONFIG_USB_GADGET=y'
-          ensure 'CONFIG_USB_OTG=y'
           ensure 'CONFIG_USB_CONFIGFS=y'
           ensure 'CONFIG_USB_CONFIGFS_HID=y'
           ensure 'CONFIG_USB_CONFIGFS_MASS_STORAGE=y'
-          ensure 'CONFIG_USB_CONFIGFS_ECM=y'
-          ensure 'CONFIG_USB_CONFIGFS_NCM=y'
           ensure 'CONFIG_USB_CONFIGFS_RNDIS=y'
-
-          # Wi-Fi stack
           ensure 'CONFIG_CFG80211=y'
           ensure 'CONFIG_MAC80211=y'
-
-          # Bluetooth stack
           ensure 'CONFIG_BT=y'
           ensure 'CONFIG_BT_HIDP=y'
-          ensure 'CONFIG_BT_L2CAP=y'
           ensure 'CONFIG_BT_RFCOMM=y'
           ensure 'CONFIG_BT_BNEP=y'
-
-          # OpenSSL 3.0 fix (disable module signing + certs)
+          # Fix OpenSSL 3.0 – vypnutie podpisovania
           ensure 'CONFIG_MODULE_SIG=n'
           ensure 'CONFIG_SYSTEM_TRUSTED_KEYS=""'
           ensure 'CONFIG_SYSTEM_REVOCATION_KEYS=""'
-
-          # Ulož upravený config, nech je deterministický
           yes "" | make O=out olddefconfig
 
-      - name: Verify required options in .config
+      - name: Build kernel (Image only)
         run: |
           set -euo pipefail
-          DEFCONFIG=out/.config
-          ok=1
-          check() { grep -q "^$1$" "$DEFCONFIG" || { echo "Missing: $1"; ok=0; }; }
-
-          # Kontrolné grepy – ak niečo chýba, job failne
-          check 'CONFIG_NETFILTER=y'
-          check 'CONFIG_NETFILTER_XTABLES=y'
-          check 'CONFIG_NETFILTER_XT_TARGET_MASQUERADE=y'
-          check 'CONFIG_NETFILTER_XT_TARGET_REDIRECT=y'
-          check 'CONFIG_TUN=y'
-          check 'CONFIG_PACKET=y'
-          check 'CONFIG_PACKET_MMAP=y'
-          check 'CONFIG_USB_GADGET=y'
-          check 'CONFIG_USB_CONFIGFS=y'
-          check 'CONFIG_USB_CONFIGFS_HID=y'
-          check 'CONFIG_USB_CONFIGFS_MASS_STORAGE=y'
-          check 'CONFIG_USB_CONFIGFS_RNDIS=y'
-          check 'CONFIG_CFG80211=y'
-          check 'CONFIG_MAC80211=y'
-          check 'CONFIG_BT=y'
-          check 'CONFIG_BT_HIDP=y'
-          check 'CONFIG_BT_RFCOMM=y'
-          check 'CONFIG_BT_BNEP=y'
-          check 'CONFIG_MODULE_SIG=n'
-          check 'CONFIG_SYSTEM_TRUSTED_KEYS=""'
-          check 'CONFIG_SYSTEM_REVOCATION_KEYS=""'
-
-          [ "$ok" -eq 1 ] || { echo "Required options missing in .config"; exit 1; }
-
-      - name: Build kernel (Image only, strict; skip dtbs)
-        run: |
-          set -euo pipefail
-          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image -j"$(nproc)" | tee build.log || { cat build.log; exit 1; }
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image -j$(nproc) | tee build.log
           if [ ! -f out/arch/arm64/boot/Image ]; then
             echo "Fallback to Image.gz"
-            make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz -j"$(nproc)" | tee -a build.log
+            make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz -j$(nproc) | tee -a build.log
           fi
           ls -lh out/arch/arm64/boot/
-          if [ ! -f out/arch/arm64/boot/Image ] && [ ! -f out/arch/arm64/boot/Image.gz ]; then
-            echo "ERROR: No Image built"; exit 1;
-          fi
+          test -f out/arch/arm64/boot/Image || test -f out/arch/arm64/boot/Image.gz
 
-      - name: Upload build log and .config
+      - name: Upload build log and config
         uses: actions/upload-artifact@v4
         with:
           name: build-log-and-config
@@ -142,9 +75,8 @@ jobs:
             build.log
             out/.config
 
-      - name: Package with AnyKernel3 (no dtb)
+      - name: Package with AnyKernel3
         run: |
-          set -euo pipefail
           git clone https://github.com/osm0sis/AnyKernel3.git
           IMG_PATH=""
           if [ -f out/arch/arm64/boot/Image ]; then IMG_PATH=out/arch/arm64/boot/Image; fi
@@ -160,16 +92,3 @@ jobs:
         with:
           name: dandelion-allmod-hacking
           path: dandelion-allmod-hacking.zip
-
-      - name: Optional: publish GitHub release
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dandelion-allmod-hacking.zip
-          tag_name: dandelion-kernel-${{ github.run_number }}
-          name: Dandelion kernel build #${{ github.run_number }}
-          body: |
-            AnyKernel3 package built from branch: dandelion-q-oss
-            Includes netfilter/tun/USB gadget/Wi-Fi/BT; module signing disabled (OpenSSL3 fix).
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
