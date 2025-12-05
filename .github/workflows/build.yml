@@ -1,4 +1,4 @@
-name: Build dandelion (Redmi 9C NFC) kernel (allmodconfig)
+name: Build dandelion (Redmi 9C NFC) kernel (allmodconfig + hacking modules)
 
 on:
   workflow_dispatch:
@@ -68,37 +68,41 @@ jobs:
           ensure 'CONFIG_BT_RFCOMM=y'
           ensure 'CONFIG_BT_BNEP=y'
 
-      - name: Build kernel (Image + dtbs)
+      - name: Build kernel (Image only, strict)
         env:
           ARCH: arm64
           SUBARCH: arm64
           CROSS_COMPILE: aarch64-linux-gnu-
         run: |
-          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image dtbs -j$(nproc) | tee build.log || \
-          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz dtbs -j$(nproc) | tee build.log
-          ls -lh out/arch/arm64/boot/ || true
+          set -euo pipefail
+          make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image -j$(nproc) | tee build.log
+          if [ ! -f out/arch/arm64/boot/Image ]; then
+            echo "Fallback to Image.gz"
+            make O=out KCFLAGS=-Wno-error DTC_EXT=/usr/bin/dtc Image.gz -j$(nproc) | tee -a build.log
+          fi
+          ls -lh out/arch/arm64/boot/
 
-      - name: Upload build log
+      - name: Upload build log and config
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
-          path: build.log
+          name: build-log-and-config
+          path: |
+            build.log
+            out/.config
 
       - name: Package with AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git
-          if [ -f out/arch/arm64/boot/Image ]; then
-            cp out/arch/arm64/boot/Image AnyKernel3/
-          elif [ -f out/arch/arm64/boot/Image.gz ]; then
-            cp out/arch/arm64/boot/Image.gz AnyKernel3/
-          fi
-          DTB_PATH=$(ls out/arch/arm64/boot/dandelion.dtb 2>/dev/null || ls out/arch/arm64/boot/*.dtb | head -n1)
-          cp "$DTB_PATH" AnyKernel3/ || true
+          IMG_PATH=''
+          if [ -f out/arch/arm64/boot/Image ]; then IMG_PATH=out/arch/arm64/boot/Image; fi
+          if [ -z "$IMG_PATH" ] && [ -f out/arch/arm64/boot/Image.gz ]; then IMG_PATH=out/arch/arm64/boot/Image.gz; fi
+          cp "$IMG_PATH" AnyKernel3/
           cd AnyKernel3
           zip -r9 ../dandelion-allmod-hacking.zip *
-          ls -lh ../dandelion-allmod-hacking.zip
+          cd ..
+          ls -lh dandelion-allmod-hacking.zip
 
-      - name: Upload artifact
+      - name: Upload artifact (ZIP)
         uses: actions/upload-artifact@v4
         with:
           name: dandelion-allmod-hacking
